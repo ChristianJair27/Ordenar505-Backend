@@ -12,7 +12,7 @@ const dishRoutes = require("./routes/dishRoutes");
 const verifyToken = require("./middlewares/verifyToken");
 const shiftRoutes = require("./routes/shiftRoutes");
 
-const PORT = config.port;
+const PORT = process.env.PORT || 80;
 
 
 const allowedOrigins = [
@@ -49,8 +49,8 @@ app.use(express.json());
 app.get('/', (req, res) => {
   res.json({ 
     status: "OK",
-    message: "API POS funcionando",
-    timestamp: new Date() 
+    message: "API POS Online",
+    timestamp: new Date().toISOString()
   });
 });
 
