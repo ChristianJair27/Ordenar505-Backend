@@ -46,9 +46,13 @@ app.use(express.json());
 
 
 // Root Endpoint
-app.get("/", (req,res) => {
-    res.json({message : "Hello from POS Server!"});
-})
+app.get('/', (req, res) => {
+  res.json({ 
+    status: "OK",
+    message: "API POS funcionando",
+    timestamp: new Date() 
+  });
+});
 
 
 
