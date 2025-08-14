@@ -21,5 +21,8 @@ ENV PORT=80
 # Expón el puerto donde escucha tu app
 EXPOSE 80
 
+
+CMD ["node", "--max-old-space-size=1024", "app.js"]  # Aumenta memoria a 1GB
+
 # Arranque
 CMD ["npm", "start"]
