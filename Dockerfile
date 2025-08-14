@@ -1,28 +1,23 @@
-# Dockerfile
 FROM node:20-bookworm-slim
 
-# Dependencias útiles (openssl para libs/ JWT; tzdata para zona horaria)
+# Instala dependencias críticas
 RUN apt-get update && apt-get install -y openssl tzdata && rm -rf /var/lib/apt/lists/*
 ENV TZ=America/Mexico_City
-
-WORKDIR /app
-
-# Instala solo dependencias de producción
-COPY package*.json ./
-RUN npm ci --omit=dev
-
-# Copia el resto del código
-COPY . .
-
-# Variables por defecto (puedes sobreescribirlas en Dokploy)
 ENV NODE_ENV=production
 ENV PORT=80
 
-# Expón el puerto donde escucha tu app
+WORKDIR /app
+
+# Instala dependencias (incluye devDependencies para Prisma)
+COPY package*.json ./
+RUN npm ci  # ¡No uses --omit=dev si necesitas Prisma!
+
+COPY . .
+
+# Genera assets de Prisma (si lo usas)
+RUN npx prisma generate
+
 EXPOSE 80
 
-
-CMD ["node", "--max-old-space-size=1024", "app.js"]  # Aumenta memoria a 1GB
-
-# Arranque
-CMD ["npm", "start"]
+# Usa node directamente (evita npm start para mejor manejo de memoria)
+CMD ["node", "--max-old-space-size=1024", "app.js"]
