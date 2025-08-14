@@ -16,10 +16,10 @@ COPY . .
 
 # Variables por defecto (puedes sobreescribirlas en Dokploy)
 ENV NODE_ENV=production
-ENV PORT=8000
+ENV PORT=80
 
 # Expón el puerto donde escucha tu app
-EXPOSE 8000
+EXPOSE 80
 
 # Arranque
 CMD ["npm", "start"]
