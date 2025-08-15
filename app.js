@@ -24,7 +24,7 @@ const allowedOrigins = [
   "https://xn--lapeadesantiago-1qb.com",
   "http://app.xn--lapeadesantiago-1qb.com:5173",
   "https://app.xn--lapeadesantiago-1qb.com:5173",
-  "http://app.xn--lapeadesantiago-1qb.com:80",
+  "https://app.xn--lapeadesantiago-1qb.com",
   "http://app.xn--lapeadesantiago-1qb.com"
 ];
 
