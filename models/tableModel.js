@@ -1,31 +1,8 @@
-  /*const mongoose = require("mongoose");
-
-const tableSchema = new mongoose.Schema({
-    tableNo: { type: Number, required: true, unique: true },
-    status: {
-        type: String,
-        default: "Available"
-    },
-    seats: { 
-        type: Number,
-        required: true
-    },
-    currentOrder: {type: mongoose.Schema.Types.ObjectId, ref: "Order"}
-});
-
-module.exports = mongoose.model("Table", tableSchema); */
-
-
-
-
-
-
-
 
 const pool = require('../config/database');
 
 // Crear una nueva mesa
-async function createTable({ table_no, status = 'Available', seats }) {
+async function createTable({ table_no, status = 'Disponible', seats }) {
     const sql = `INSERT INTO tables (table_no, status, seats) VALUES (?, ?, ?)`;
     const [result] = await pool.execute(sql, [table_no, status, seats]);
 
@@ -46,8 +23,15 @@ async function updateTableStatusAndOrder(tableId, status, orderId) {
     await pool.execute(sql, [status, orderId, tableId]);
 }
 
+async function deleteTableById(id) {
+  const conn = await db.getConnection();
+  await conn.execute("DELETE FROM tables WHERE id = ?", [id]);
+  conn.release();
+}
+
 module.exports = {
     createTable,
     getTableByNumber,
-    updateTableStatusAndOrder
+    updateTableStatusAndOrder,
+    deleteTableById
 };
