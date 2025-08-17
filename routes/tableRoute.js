@@ -20,6 +20,6 @@ router.put("/:id", updateTable);
 
 // Eliminar mesa
 
-router.delete("/:id", verifyToken, deleteTable);
+router.delete("/:id", deleteTable);
 
 module.exports = router;
