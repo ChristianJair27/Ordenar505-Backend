@@ -1,41 +1,3 @@
-    /*const mongoose = require("mongoose");
-
-const orderSchema = new mongoose.Schema({
-    customerDetails: {
-        name: { type: String, required: true },
-        phone: { type: String, requried: true},
-        guests: { type: Number, required: true },
-    },
-    orderStatus: {
-        type: String,
-        required: true
-    },
-    orderDate: {
-        type: Date,
-        default : Date.now()
-    },
-    bills: {
-        total: { type: Number, required: true },
-        tax: { type: Number, required: true },
-        totalWithTax: { type: Number, required: true }
-    },
-    items: [],
-    table: { type: mongoose.Schema.Types.ObjectId, ref: "Table" },
-    paymentMethod: String,
-    paymentData: {
-        razorpay_order_id: String,
-        razorpay_payment_id: String
-    }
-}, { timestamps : true } );
-
-module.exports = mongoose.model("Order", orderSchema);  */
-
-
-
-
-
-
-
 
 const pool = require('../config/database');
 
@@ -47,7 +9,7 @@ async function createOrder(orderData, items) {
 
         const [orderResult] = await connection.execute(`
             INSERT INTO orders 
-            (customer_name, customer_phone, guests, order_status, total, tax, total_with_tax, table_id, payment_method, razorpay_order_id, razorpay_payment_id)
+            (customer_name, customer_phone, guests, order_status, total, tax, total_with_tax, table_id, payment_method)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
             orderData.customer_name,
@@ -58,9 +20,7 @@ async function createOrder(orderData, items) {
             orderData.tax,
             orderData.total_with_tax,
             orderData.table_id,
-            orderData.payment_method,
-            orderData.razorpay_order_id,
-            orderData.razorpay_payment_id
+            orderData.payment_method
         ]);
 
         const orderId = orderResult.insertId;
