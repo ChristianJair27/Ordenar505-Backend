@@ -26,7 +26,7 @@ const addOrder = async (req, res, next) => {
     const [result] = await conn.execute(
       `INSERT INTO orders
         (name, phone, guests, order_status, order_date, total, tax, total_with_tax, table_id, payment_method)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         customerDetails?.name ?? null,
         customerDetails?.phone ?? null,
