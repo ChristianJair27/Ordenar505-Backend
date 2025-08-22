@@ -136,36 +136,92 @@ const updateOrder = async (req, res, next) => {
   const conn = await db.getConnection();
   try {
     const { id } = req.params;
-    const { orderStatus = "pagado", paymentMethod } = req.body;
+    const { op, items, orderStatus, paymentMethod } = req.body;
 
     await conn.beginTransaction();
 
-    // 1) Actualiza estado de la orden
-    const [result] = await conn.execute(
-      `UPDATE orders
-          SET order_status = ?, payment_method = ?
-        WHERE id = ?`,
-      [orderStatus, paymentMethod || null, id]
+    // 0) Asegúrate de que la orden exista
+    const [[order]] = await conn.execute(
+      "SELECT id, total, tax, total_with_tax FROM orders WHERE id = ?",
+      [id]
     );
-
-    if (result.affectedRows === 0) {
+    if (!order) {
       await conn.rollback();
       return next(createHttpError(404, "Order not found!"));
     }
 
-    // 2) Si está pagado, libera la mesa y limpia current_order_id
-    if (orderStatus === "pagado") {
-  await conn.execute(
-    `UPDATE \`tables\`
-        SET status = 'Disponible', current_order_id = NULL
-      WHERE id = (SELECT table_id FROM orders WHERE id = ?)`,
-    [id]
-  );
-}
+    // A) APENDIZAR ITEMS
+    if (op === "appendItems") {
+      if (!Array.isArray(items) || items.length === 0) {
+        await conn.rollback();
+        return next(createHttpError(400, "Items array is required"));
+      }
+
+      // Inserta nuevos renglones
+      let deltaTotal = 0;
+      for (const it of items) {
+        const name = it.name ?? "Artículo";
+        const qty = Number(it.quantity ?? 1);
+        const price = Number(it.price ?? 0); // total del renglón (ya viene sumado)
+        deltaTotal += price;
+
+        await conn.execute(
+          `INSERT INTO order_items (order_id, item_name, quantity, price)
+           VALUES (?, ?, ?, ?)`,
+          [id, name, qty, price]
+        );
+      }
+
+      // Actualiza totales (ajusta si manejas impuestos distintos)
+      const newTotal = Number(order.total || 0) + deltaTotal;
+      const newTax = Number(order.tax || 0); // si no usas IVA por renglón, deja igual
+      const newTotalWithTax = Number(order.total_with_tax || 0) + deltaTotal;
+
+      await conn.execute(
+        `UPDATE orders
+           SET total = ?, total_with_tax = ?
+         WHERE id = ?`,
+        [newTotal, newTotalWithTax, id]
+      );
+
+      await conn.commit();
+      return res.status(200).json({
+        success: true,
+        message: "Items appended",
+        data: { orderId: Number(id), deltaTotal },
+      });
+    }
+
+    // B) ACTUALIZAR ESTADO/PAGO (comportamiento anterior, pero sin 404 por 0 filas)
+    const newStatus = orderStatus ?? null; // si no envías status, no lo tocamos
+    const newPayment = paymentMethod ?? null;
+
+    if (newStatus !== null || newPayment !== null) {
+      // Actualiza solo los campos provistos
+      const sets = [];
+      const vals = [];
+      if (newStatus !== null) { sets.push("order_status = ?"); vals.push(newStatus); }
+      if (newPayment !== null) { sets.push("payment_method = ?"); vals.push(newPayment); }
+      vals.push(id);
+
+      await conn.execute(
+        `UPDATE orders SET ${sets.join(", ")} WHERE id = ?`,
+        vals
+      );
+
+      // Si marcaste pagado, libera mesa
+      if (newStatus === "pagado") {
+        await conn.execute(
+          `UPDATE \`tables\`
+              SET status = 'Disponible', current_order_id = NULL
+            WHERE id = (SELECT table_id FROM orders WHERE id = ?)`,
+          [id]
+        );
+      }
+    }
 
     await conn.commit();
-
-    res.status(200).json({ success: true, message: "Order updated" });
+    return res.status(200).json({ success: true, message: "Order updated" });
   } catch (error) {
     try { await conn.rollback(); } catch (_) {}
     next(error);
@@ -173,6 +229,7 @@ const updateOrder = async (req, res, next) => {
     conn.release();
   }
 };
+
 
 const getCashMovements = async (req, res, next) => {
   try {
