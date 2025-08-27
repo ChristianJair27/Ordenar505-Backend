@@ -24,22 +24,22 @@ const addOrder = async (req, res, next) => {
 
     // 1) Crear la orden
     const [result] = await conn.execute(
-      `INSERT INTO orders
-        (name, phone, guests, order_status, order_date, total, tax, total_with_tax, table_id, payment_method)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        customerDetails?.name ?? null,
-        customerDetails?.phone ?? null,
-        customerDetails?.guests ?? 1,
-        orderStatus,            // ej. 'open' / 'pendiente'
-        date,
-        bills?.total ?? 0,
-        bills?.tax ?? 0,
-        bills?.totalWithTax ?? 0,
-        tableId,
-        paymentMethodSafe,
-      
-      ]
+         `INSERT INTO orders
+    (name, phone, guests, order_status, order_date, total, tax, total_with_tax, table_id, payment_method, user_id)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  [
+    customerDetails?.name ?? null,
+    customerDetails?.phone ?? null,
+    customerDetails?.guests ?? 1,
+    orderStatus,
+    date,
+    bills?.total ?? 0,
+    bills?.tax ?? 0,
+    bills?.totalWithTax ?? 0,
+    tableId,
+    paymentMethodSafe,
+    req.body.user_id ?? null,   // 👈 mesero/creador
+  ]
     );
 
     const orderId = result.insertId;

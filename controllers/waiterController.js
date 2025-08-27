@@ -1,56 +1,50 @@
 // controllers/waiter.js
 const db = require("../config/database");
+const moment = require("moment-timezone");
 
-// Cambia si tu columna de timestamp es otra (ej. created_at)
+// Ajusta si tu columna datetime tiene otro nombre
 const COL_TS = "date";
-
-// Qué tipos cuentan como venta: usa lo que tengas en DB
-const SALES_TYPES = ["venta", "ingreso"]; // <-- si realmente usas 'venta', deja ["venta"]
+// Sólo ventas cuentan para propina/ingreso del mesero
+const SALES_TYPES = ["venta"];
+const TIPS_PCT = 0.03;
 
 async function getTodayStatsFromCash(req, res) {
-  const waiterId = req.user?.id || req.query.waiter_id;
-  if (!waiterId) {
-    return res.status(400).json({ success: false, message: "waiter_id requerido" });
-  }
-
-  // offset horario, p.ej. "-06:00"; si no te late, fija "-06:00"
-  const tz = req.query.tz || "-06:00";
-
-  let conn;
   try {
-    conn = await db.getConnection();
+    const waiterId = Number(req.user?.id ?? req.query.waiter_id);
+    if (!waiterId) {
+      return res.status(400).json({ success: false, message: "waiter_id requerido" });
+    }
 
-    // Armamos lista de tipos para IN (evita inyección)
-    const typePlaceholders = SALES_TYPES.map(() => "?").join(",");
+    // Ventana del día en CDMX [00:00, 23:59:59]
+    const start = moment().tz("America/Mexico_City").startOf("day").format("YYYY-MM-DD HH:mm:ss");
+    const end   = moment().tz("America/Mexico_City").endOf("day").format("YYYY-MM-DD HH:mm:ss");
 
-    const [rows] = await conn.execute(
+    // Query: ventas del día para ese mesero
+    const [rows] = await db.query(
       `
-      SELECT 
-        ? AS waiter_id,
-        -- si order_id viene NULL, cuenta filas
-        COUNT(DISTINCT COALESCE(order_id, CONCAT('row:', id))) AS orders_count,
-        COALESCE(SUM(amount), 0) AS revenue
+      SELECT
+        COUNT(DISTINCT order_id)                                            AS orders_count,
+        COALESCE(SUM(CASE WHEN type IN (?) THEN amount ELSE 0 END), 0)      AS revenue
       FROM cash_register
-      WHERE user_id = ?
-        AND type IN (${typePlaceholders})
-        -- Compara "hoy" en tu TZ: convierte la columna a tz local y compara la fecha con "ahora" en esa misma tz
-        AND DATE(CONVERT_TZ(${COL_TS}, @@session.time_zone, ?)) = DATE(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', ?))
+      WHERE waiter_id = ?
+        AND type IN (?)
+        AND ${COL_TS} BETWEEN ? AND ?
       `,
-      [
-        waiterId,               // SELECT ... AS waiter_id
-        waiterId,               // WHERE user_id = ?
-        ...SALES_TYPES,         // IN (...)
-        tz, tz                  // dos veces para CONVERT_TZ
-      ]
+      // Nota: para pasar un array a IN (?) con mysql2, pásalo dos veces (para ambas IN)
+      [SALES_TYPES, waiterId, SALES_TYPES, start, end]
     );
 
-    const data = rows?.[0] || { waiter_id: Number(waiterId), orders_count: 0, revenue: 0 };
-    return res.json({ success: true, data });
+    const orders_count = Number(rows?.[0]?.orders_count || 0);
+    const revenue = Number(rows?.[0]?.revenue || 0);
+    const kitchen_tips = +(revenue * TIPS_PCT).toFixed(2);
+
+    return res.status(200).json({
+      success: true,
+      data: { orders_count, revenue, kitchen_tips }
+    });
   } catch (e) {
     console.error("getTodayStatsFromCash error:", e);
     return res.status(500).json({ success: false, message: "Error interno" });
-  } finally {
-    conn?.release?.();
   }
 }
 
