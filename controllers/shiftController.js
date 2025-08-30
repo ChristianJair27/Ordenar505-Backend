@@ -173,16 +173,16 @@ exports.getShiftSummary = async (req, res, next) => {
 // Ajusta si también cuentas otros tipos (ej. 'entrada')
 const SALES_TYPES = ["venta"]; // ["venta","entrada"] si aplica
 
+
 exports.getTurnoActual = async (req, res, next) => {
   try {
-    // 1) Tomar el último turno activo
-    const [[shift]] = await db.execute(
-      `SELECT id, user_id, start_time, end_time, status
-       FROM shifts
-       WHERE status = 'activo' OR end_time IS NULL
-       ORDER BY id DESC
-       LIMIT 1`
-    );
+    const [[shift]] = await db.execute(`
+      SELECT id, user_id, start_time, end_time, status
+      FROM shifts
+      WHERE status = 'activo' OR end_time IS NULL
+      ORDER BY id DESC
+      LIMIT 1
+    `);
 
     if (!shift) {
       return res.json({
@@ -191,21 +191,20 @@ exports.getTurnoActual = async (req, res, next) => {
           total_ventas: 0,
           total_ordenes: 0,
           hora_inicio: null,
+          shift_id: null,           // 👈 NUEVO
         },
       });
     }
 
-    // 2) Sumar ventas del shift usando shift_id (¡parámetros en orden correcto!)
-    const placeholders = SALES_TYPES.map(() => "?").join(",");
     const [rows] = await db.execute(
       `
       SELECT
         COALESCE(SUM(amount), 0) AS total_ventas,
         COUNT(DISTINCT COALESCE(order_id, CONCAT('row:', id))) AS total_ordenes
       FROM cash_register
-      WHERE type IN (${placeholders}) AND shift_id = ?
+      WHERE type IN ('venta') AND shift_id = ?
       `,
-      [...SALES_TYPES, shift.id] // <- el último ? es shift_id
+      [shift.id]
     );
 
     const agg = rows?.[0] || { total_ventas: 0, total_ordenes: 0 };
@@ -216,11 +215,13 @@ exports.getTurnoActual = async (req, res, next) => {
         total_ventas: Number(agg.total_ventas) || 0,
         total_ordenes: Number(agg.total_ordenes) || 0,
         hora_inicio: shift.start_time,
+        shift_id: shift.id,        // 👈 NUEVO
       },
     });
   } catch (err) {
     next(err);
   }
 };
+
 
 

@@ -180,5 +180,29 @@ const deleteUser = async (req, res, next) => {
   }
 };
 
+const listUsers = async (req, res, next) => {
+  try {
+    const { role } = req.query;
 
-module.exports = { register, login, getUserData, logout, getAllUsers, updateUser, deleteUser, };
+    // Ajusta según tus valores de rol. Si pides waiter, aceptamos waiter|mesero
+    let sql = "SELECT id, name, email, phone, role FROM users";
+    const params = [];
+
+    if (role) {
+      if (role === "waiter") {
+        sql += " WHERE role IN ('waiter','mesero')";
+      } else {
+        sql += " WHERE role = ?";
+        params.push(role);
+      }
+    }
+
+    const [rows] = await db.execute(sql, params);
+    res.status(200).json({ success: true, data: rows });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+module.exports = { register, login, getUserData, logout, getAllUsers, updateUser, deleteUser, listUsers, };

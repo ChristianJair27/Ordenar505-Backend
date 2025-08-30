@@ -7,7 +7,8 @@ const {
   logout,
   getAllUsers,
   updateUser,
-  deleteUser
+  deleteUser,
+  listUsers,
 
 } = require("../controllers/userController");
 
@@ -28,5 +29,8 @@ router.put("/:id", verifyToken, updateUser);
 
 // Eliminar usuario
 router.delete("/:id", verifyToken, deleteUser);
+
+
+router.get("/users", /* verifyToken, */ listUsers);
 
 module.exports = router;

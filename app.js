@@ -13,6 +13,9 @@ const dishRoutes = require("./routes/dishRoutes");
 const verifyToken = require("./middlewares/verifyToken");
 const shiftRoutes = require("./routes/shiftRoutes");
 
+
+const orderRoute = require("./routes/orderRoute");
+
 // 👇 Kiosk (meseros tipo Netflix)
 const kioskAuthRoutes = require("./routes/kioskAuthRoutes");
 
@@ -98,6 +101,8 @@ app.use("/api/dishes",     dishRoutes);
 
 // Waiters (ya lo tenías)
 app.use("/api", require("./routes/waiterRoute"));
+
+app.use("/api/order", orderRoute);
 
 // Global error
 app.use(globalErrorHandler);
