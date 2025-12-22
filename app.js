@@ -32,7 +32,8 @@ const allowedOrigins = [
   "https://app.xn--lapeadesantiago-1qb.com:5173",
   "https://app.xn--lapeadesantiago-1qb.com",
   "https://app.xn--lapeadesantiago-1qb.com:80",
-  "http://app.xn--lapeadesantiago-1qb.com"
+  "http://app.xn--lapeadesantiago-1qb.com",
+  "https://madero.xn--lapeadesantiago-1qb.com",
 ];
 
 app.use(cookieParser());
