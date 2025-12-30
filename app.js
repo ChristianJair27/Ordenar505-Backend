@@ -22,7 +22,11 @@ const kioskAuthRoutes = require("./routes/kioskAuthRoutes");
 const PORT = process.env.PORT || 80;
 
 const allowedOrigins = [
+<<<<<<< HEAD
   "http://192.168.1.11:5173",
+=======
+  "http://192.168.1.80:5173",
+>>>>>>> 63e0672 (Update Menu page)
   "http://192.168.1.78:5173",
   "http://localhost:5173",
   "http://187.200.118.87:5173",
@@ -32,8 +36,12 @@ const allowedOrigins = [
   "https://app.xn--lapeadesantiago-1qb.com:5173",
   "https://app.xn--lapeadesantiago-1qb.com",
   "https://app.xn--lapeadesantiago-1qb.com:80",
+<<<<<<< HEAD
   "http://app.xn--lapeadesantiago-1qb.com",
   "https://madero.xn--lapeadesantiago-1qb.com",
+=======
+  "http://app.xn--lapeadesantiago-1qb.com"
+>>>>>>> 63e0672 (Update Menu page)
 ];
 
 app.use(cookieParser());

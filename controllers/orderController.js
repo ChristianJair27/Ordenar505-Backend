@@ -14,7 +14,11 @@ const addOrder = async (req, res, next) => {
       items,
       table,
       paymentMethod,
+<<<<<<< HEAD
       paymentData, // (reservado, por si lo usas luego)
+=======
+      paymentData, // (reservado)
+>>>>>>> 63e0672 (Update Menu page)
     } = req.body;
 
     // Normaliza table_id (acepta id directo o null)
@@ -50,6 +54,7 @@ const addOrder = async (req, res, next) => {
 
     const orderId = result.insertId;
 
+<<<<<<< HEAD
     // 2) Insertar items
     if (Array.isArray(items)) {
       for (const item of items) {
@@ -57,6 +62,20 @@ const addOrder = async (req, res, next) => {
           `INSERT INTO order_items (order_id, item_name, quantity, price)
            VALUES (?, ?, ?, ?)`,
           [orderId, item.name ?? "Artículo", Number(item.quantity ?? 1), Number(item.price ?? 0)]
+=======
+    // 2) Insertar items (✅ ahora incluye notes)
+    if (Array.isArray(items)) {
+      for (const item of items) {
+        const name = item?.name ?? item?.item_name ?? "Artículo";
+        const qty = Number(item?.quantity ?? 1);
+        const price = Number(item?.price ?? 0);
+        const notes = (item?.notes ?? "").toString().trim() || null;
+
+        await conn.execute(
+          `INSERT INTO order_items (order_id, item_name, quantity, price, notes)
+           VALUES (?, ?, ?, ?, ?)`,
+          [orderId, name, qty, price, notes]
+>>>>>>> 63e0672 (Update Menu page)
         );
       }
     }
@@ -91,6 +110,7 @@ const getOrderById = async (req, res, next) => {
     const { id } = req.params;
 
     const [[order]] = await db.execute(
+<<<<<<< HEAD
    `SELECT o.*,
            t.table_no,
            u.id   AS waiter_id,
@@ -106,6 +126,26 @@ const getOrderById = async (req, res, next) => {
 
     const [items] = await db.execute(
       `SELECT * FROM order_items WHERE order_id = ?`,
+=======
+      `SELECT o.*,
+              t.table_no,
+              u.id   AS waiter_id,
+              u.name AS waiter_name
+         FROM orders o
+         LEFT JOIN tables t ON o.table_id = t.id
+         LEFT JOIN users  u ON o.user_id  = u.id
+        WHERE o.id = ?`,
+      [id]
+    );
+
+    if (!order) return next(createHttpError(404, "Order not found!"));
+
+    // ✅ incluye notes
+    const [items] = await db.execute(
+      `SELECT id, order_id, item_name, quantity, price, notes
+         FROM order_items
+        WHERE order_id = ?`,
+>>>>>>> 63e0672 (Update Menu page)
       [id]
     );
 
@@ -120,6 +160,7 @@ const getOrderById = async (req, res, next) => {
 const getOrders = async (req, res, next) => {
   try {
     const [orders] = await db.execute(`
+<<<<<<< HEAD
    SELECT o.*,
           t.table_no,
           u.id   AS waiter_id,
@@ -134,6 +175,25 @@ const getOrders = async (req, res, next) => {
       orders.map(async (order) => {
         const [items] = await db.execute(
           `SELECT * FROM order_items WHERE order_id = ?`,
+=======
+      SELECT o.*,
+             t.table_no,
+             u.id   AS waiter_id,
+             u.name AS waiter_name
+        FROM orders o
+        LEFT JOIN tables t ON o.table_id = t.id
+        LEFT JOIN users  u ON o.user_id  = u.id
+       ORDER BY o.order_date DESC
+    `);
+
+    const ordersWithItems = await Promise.all(
+      orders.map(async (order) => {
+        // ✅ incluye notes
+        const [items] = await db.execute(
+          `SELECT id, order_id, item_name, quantity, price, notes
+             FROM order_items
+            WHERE order_id = ?`,
+>>>>>>> 63e0672 (Update Menu page)
           [order.id]
         );
         return { ...order, items, table: { table_no: order.table_no } };
@@ -174,6 +234,7 @@ const updateOrder = async (req, res, next) => {
 
       let deltaTotal = 0;
       for (const it of items) {
+<<<<<<< HEAD
         const name = it.name ?? "Artículo";
         const qty = Number(it.quantity ?? 1);
         const price = Number(it.price ?? 0); // total del renglón
@@ -183,6 +244,19 @@ const updateOrder = async (req, res, next) => {
           `INSERT INTO order_items (order_id, item_name, quantity, price)
            VALUES (?, ?, ?, ?)`,
           [id, name, qty, price]
+=======
+        const name = it?.name ?? it?.item_name ?? "Artículo";
+        const qty = Number(it?.quantity ?? 1);
+        const price = Number(it?.price ?? 0); // total del renglón
+        const notes = (it?.notes ?? "").toString().trim() || null;
+
+        deltaTotal += price;
+
+        await conn.execute(
+          `INSERT INTO order_items (order_id, item_name, quantity, price, notes)
+           VALUES (?, ?, ?, ?, ?)`,
+          [id, name, qty, price, notes]
+>>>>>>> 63e0672 (Update Menu page)
         );
       }
 
@@ -261,7 +335,10 @@ const getCashMovements = async (req, res, next) => {
   }
 };
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 63e0672 (Update Menu page)
 const assignWaiter = async (req, res, next) => {
   const orderId  = parseInt(req.params.id, 10);
   const waiterId = parseInt(req.body.waiter_id, 10);
@@ -314,15 +391,21 @@ const assignWaiter = async (req, res, next) => {
   } catch (e) {
     try { if (conn) await conn.rollback(); } catch (_) {}
     console.error("assignWaiter SQL:", e.code, e.sqlMessage || e.message, { orderId, waiterId });
+<<<<<<< HEAD
     console.log("assign waiter error:", err?.response?.data); // 👈
+=======
+>>>>>>> 63e0672 (Update Menu page)
     return res.status(500).json({ success: false, message: "Error al reasignar mesero" });
   } finally {
     if (conn) conn.release();
   }
 };
 
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> 63e0672 (Update Menu page)
 const getKitchenOrdersPublic = async (req, res, next) => {
   try {
     // 1. Turno activo
@@ -350,11 +433,21 @@ const getKitchenOrdersPublic = async (req, res, next) => {
       ORDER BY o.order_date ASC
     `, [shift.start_time]);
 
+<<<<<<< HEAD
     // 3. Items por orden
     const ordersWithItems = await Promise.all(
       orders.map(async (order) => {
         const [items] = await db.execute(
           `SELECT item_name, quantity FROM order_items WHERE order_id = ?`,
+=======
+    // 3. Items por orden (✅ ahora incluye notes)
+    const ordersWithItems = await Promise.all(
+      orders.map(async (order) => {
+        const [items] = await db.execute(
+          `SELECT item_name, quantity, notes
+             FROM order_items
+            WHERE order_id = ?`,
+>>>>>>> 63e0672 (Update Menu page)
           [order.id]
         );
         return { ...order, items, table: { table_no: order.table_no } };
@@ -367,12 +460,16 @@ const getKitchenOrdersPublic = async (req, res, next) => {
   }
 };
 
+<<<<<<< HEAD
 
 
 
 
 
 // 👇 Exporta TODO en un solo objeto (clave del fix)
+=======
+// 👇 Exporta TODO
+>>>>>>> 63e0672 (Update Menu page)
 module.exports = {
   addOrder,
   getOrderById,
@@ -380,5 +477,9 @@ module.exports = {
   updateOrder,
   getCashMovements,
   assignWaiter,
+<<<<<<< HEAD
    getKitchenOrdersPublic,
+=======
+  getKitchenOrdersPublic,
+>>>>>>> 63e0672 (Update Menu page)
 };
