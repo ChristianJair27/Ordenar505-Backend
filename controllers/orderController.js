@@ -2,10 +2,13 @@ const createHttpError = require("http-errors");
 const db = require("../config/database");
 const moment = require("moment-timezone");
 
+/**
+ * CREATE ORDER
+ */
 const addOrder = async (req, res, next) => {
   let conn;
   try {
-    conn = await db.getConnection(); // mysql2/promise pool
+    conn = await db.getConnection();
 
     const {
       customerDetails,
@@ -14,18 +17,16 @@ const addOrder = async (req, res, next) => {
       items,
       table,
       paymentMethod,
-<<<<<<< HEAD
-      paymentData, // (reservado, por si lo usas luego)
-=======
-      paymentData, // (reservado)
->>>>>>> 63e0672 (Update Menu page)
+      paymentData, // reservado (solo una vez ✅)
     } = req.body;
 
-    // Normaliza table_id (acepta id directo o null)
+    // Normaliza table_id
     const tableId =
-      Number.isInteger(table) ? table :
-      Number.isInteger(req.body.table_id) ? req.body.table_id :
-      null;
+      Number.isInteger(table)
+        ? table
+        : Number.isInteger(req.body.table_id)
+          ? req.body.table_id
+          : null;
 
     const paymentMethodSafe = paymentMethod ?? null;
     const date = moment().tz("America/Mexico_City").format("YYYY-MM-DD HH:mm:ss");
@@ -41,29 +42,20 @@ const addOrder = async (req, res, next) => {
         customerDetails?.name ?? null,
         customerDetails?.phone ?? null,
         customerDetails?.guests ?? 1,
-        orderStatus,
+        orderStatus ?? "pendiente",
         date,
         bills?.total ?? 0,
         bills?.tax ?? 0,
         bills?.totalWithTax ?? 0,
         tableId,
         paymentMethodSafe,
-        req.body.user_id ?? null, // mesero/creador
+        req.body.user_id ?? null,
       ]
     );
 
     const orderId = result.insertId;
 
-<<<<<<< HEAD
-    // 2) Insertar items
-    if (Array.isArray(items)) {
-      for (const item of items) {
-        await conn.execute(
-          `INSERT INTO order_items (order_id, item_name, quantity, price)
-           VALUES (?, ?, ?, ?)`,
-          [orderId, item.name ?? "Artículo", Number(item.quantity ?? 1), Number(item.price ?? 0)]
-=======
-    // 2) Insertar items (✅ ahora incluye notes)
+    // 2) Insertar items (incluye notes ✅)
     if (Array.isArray(items)) {
       for (const item of items) {
         const name = item?.name ?? item?.item_name ?? "Artículo";
@@ -75,18 +67,17 @@ const addOrder = async (req, res, next) => {
           `INSERT INTO order_items (order_id, item_name, quantity, price, notes)
            VALUES (?, ?, ?, ?, ?)`,
           [orderId, name, qty, price, notes]
->>>>>>> 63e0672 (Update Menu page)
         );
       }
     }
 
-    // 3) Marcar mesa con la orden actual (solo si hay mesa)
+    // 3) Marcar mesa ocupada
     if (tableId) {
       await conn.execute(
         `UPDATE \`tables\`
            SET current_order_id = ?, status = 'Ocupado'
-         WHERE id = (SELECT table_id FROM orders WHERE id = ?)`,
-        [orderId, orderId]
+         WHERE id = ?`,
+        [orderId, tableId]
       );
     }
 
@@ -105,28 +96,14 @@ const addOrder = async (req, res, next) => {
   }
 };
 
+/**
+ * GET ORDER BY ID (con items + notes ✅)
+ */
 const getOrderById = async (req, res, next) => {
   try {
     const { id } = req.params;
 
     const [[order]] = await db.execute(
-<<<<<<< HEAD
-   `SELECT o.*,
-           t.table_no,
-           u.id   AS waiter_id,
-           u.name AS waiter_name
-      FROM orders o
-      LEFT JOIN tables t ON o.table_id = t.id
-      LEFT JOIN users  u ON o.user_id  = u.id
-     WHERE o.id = ?`,
-   [id]
- );
-
-    if (!order) return next(createHttpError(404, "Order not found!"));
-
-    const [items] = await db.execute(
-      `SELECT * FROM order_items WHERE order_id = ?`,
-=======
       `SELECT o.*,
               t.table_no,
               u.id   AS waiter_id,
@@ -140,42 +117,26 @@ const getOrderById = async (req, res, next) => {
 
     if (!order) return next(createHttpError(404, "Order not found!"));
 
-    // ✅ incluye notes
     const [items] = await db.execute(
       `SELECT id, order_id, item_name, quantity, price, notes
          FROM order_items
         WHERE order_id = ?`,
->>>>>>> 63e0672 (Update Menu page)
       [id]
     );
 
     const fullOrder = { ...order, items, table: { table_no: order.table_no } };
-
     res.status(200).json({ success: true, data: fullOrder });
   } catch (error) {
     next(error);
   }
 };
 
+/**
+ * GET ORDERS (con items + notes ✅)
+ */
 const getOrders = async (req, res, next) => {
   try {
     const [orders] = await db.execute(`
-<<<<<<< HEAD
-   SELECT o.*,
-          t.table_no,
-          u.id   AS waiter_id,
-          u.name AS waiter_name
-     FROM orders o
-     LEFT JOIN tables t ON o.table_id = t.id
-     LEFT JOIN users  u ON o.user_id  = u.id
-    ORDER BY o.order_date DESC
- `);
-
-    const ordersWithItems = await Promise.all(
-      orders.map(async (order) => {
-        const [items] = await db.execute(
-          `SELECT * FROM order_items WHERE order_id = ?`,
-=======
       SELECT o.*,
              t.table_no,
              u.id   AS waiter_id,
@@ -188,12 +149,10 @@ const getOrders = async (req, res, next) => {
 
     const ordersWithItems = await Promise.all(
       orders.map(async (order) => {
-        // ✅ incluye notes
         const [items] = await db.execute(
           `SELECT id, order_id, item_name, quantity, price, notes
              FROM order_items
             WHERE order_id = ?`,
->>>>>>> 63e0672 (Update Menu page)
           [order.id]
         );
         return { ...order, items, table: { table_no: order.table_no } };
@@ -206,6 +165,11 @@ const getOrders = async (req, res, next) => {
   }
 };
 
+/**
+ * UPDATE ORDER
+ * - op: "appendItems" agrega items (incluye notes ✅) y suma totales
+ * - también puede actualizar status / payment_method
+ */
 const updateOrder = async (req, res, next) => {
   let conn;
   try {
@@ -215,17 +179,17 @@ const updateOrder = async (req, res, next) => {
 
     await conn.beginTransaction();
 
-    // 0) Asegúrate de que la orden exista
     const [[order]] = await conn.execute(
-      "SELECT id, total, tax, total_with_tax FROM orders WHERE id = ?",
+      "SELECT id, total, tax, total_with_tax, table_id FROM orders WHERE id = ?",
       [id]
     );
+
     if (!order) {
       await conn.rollback();
       return next(createHttpError(404, "Order not found!"));
     }
 
-    // A) APENDIZAR ITEMS
+    // A) appendItems
     if (op === "appendItems") {
       if (!Array.isArray(items) || items.length === 0) {
         await conn.rollback();
@@ -233,21 +197,11 @@ const updateOrder = async (req, res, next) => {
       }
 
       let deltaTotal = 0;
-      for (const it of items) {
-<<<<<<< HEAD
-        const name = it.name ?? "Artículo";
-        const qty = Number(it.quantity ?? 1);
-        const price = Number(it.price ?? 0); // total del renglón
-        deltaTotal += price;
 
-        await conn.execute(
-          `INSERT INTO order_items (order_id, item_name, quantity, price)
-           VALUES (?, ?, ?, ?)`,
-          [id, name, qty, price]
-=======
+      for (const it of items) {
         const name = it?.name ?? it?.item_name ?? "Artículo";
         const qty = Number(it?.quantity ?? 1);
-        const price = Number(it?.price ?? 0); // total del renglón
+        const price = Number(it?.price ?? 0);
         const notes = (it?.notes ?? "").toString().trim() || null;
 
         deltaTotal += price;
@@ -256,7 +210,6 @@ const updateOrder = async (req, res, next) => {
           `INSERT INTO order_items (order_id, item_name, quantity, price, notes)
            VALUES (?, ?, ?, ?, ?)`,
           [id, name, qty, price, notes]
->>>>>>> 63e0672 (Update Menu page)
         );
       }
 
@@ -278,29 +231,30 @@ const updateOrder = async (req, res, next) => {
       });
     }
 
-    // B) ACTUALIZAR ESTADO/PAGO
-    const newStatus = orderStatus ?? null;
-    const newPayment = paymentMethod ?? null;
+    // B) actualizar status / payment
+    const sets = [];
+    const vals = [];
 
-    if (newStatus !== null || newPayment !== null) {
-      const sets = [];
-      const vals = [];
-      if (newStatus !== null) { sets.push("order_status = ?"); vals.push(newStatus); }
-      if (newPayment !== null) { sets.push("payment_method = ?"); vals.push(newPayment); }
+    if (orderStatus != null) {
+      sets.push("order_status = ?");
+      vals.push(orderStatus);
+    }
+    if (paymentMethod != null) {
+      sets.push("payment_method = ?");
+      vals.push(paymentMethod);
+    }
+
+    if (sets.length > 0) {
       vals.push(id);
+      await conn.execute(`UPDATE orders SET ${sets.join(", ")} WHERE id = ?`, vals);
 
-      await conn.execute(
-        `UPDATE orders SET ${sets.join(", ")} WHERE id = ?`,
-        vals
-      );
-
-      // Si marcaste pagado, libera mesa
-      if (newStatus === "pagado") {
+      // si pagado => liberar mesa
+      if (String(orderStatus).toLowerCase() === "pagado") {
         await conn.execute(
           `UPDATE \`tables\`
               SET status = 'Disponible', current_order_id = NULL
-            WHERE id = (SELECT table_id FROM orders WHERE id = ?)`,
-          [id]
+            WHERE id = ?`,
+          [order.table_id]
         );
       }
     }
@@ -315,6 +269,9 @@ const updateOrder = async (req, res, next) => {
   }
 };
 
+/**
+ * CASH MOVEMENTS
+ */
 const getCashMovements = async (req, res, next) => {
   try {
     const [movements] = await db.execute(`
@@ -335,12 +292,11 @@ const getCashMovements = async (req, res, next) => {
   }
 };
 
-<<<<<<< HEAD
-
-=======
->>>>>>> 63e0672 (Update Menu page)
-const assignWaiter = async (req, res, next) => {
-  const orderId  = parseInt(req.params.id, 10);
+/**
+ * ASSIGN WAITER
+ */
+const assignWaiter = async (req, res) => {
+  const orderId = parseInt(req.params.id, 10);
   const waiterId = parseInt(req.body.waiter_id, 10);
 
   if (!Number.isInteger(orderId) || !Number.isInteger(waiterId)) {
@@ -352,7 +308,6 @@ const assignWaiter = async (req, res, next) => {
     conn = await db.getConnection();
     await conn.beginTransaction();
 
-    // 1) Orden existe
     const [[ord]] = await conn.execute(
       "SELECT id, user_id, name FROM orders WHERE id = ?",
       [orderId]
@@ -362,7 +317,6 @@ const assignWaiter = async (req, res, next) => {
       return res.status(404).json({ success: false, message: "Orden no encontrada" });
     }
 
-    // 2) Mesero válido
     const [[usr]] = await conn.execute(
       "SELECT id, name, role FROM users WHERE id = ?",
       [waiterId]
@@ -371,12 +325,11 @@ const assignWaiter = async (req, res, next) => {
       await conn.rollback();
       return res.status(400).json({ success: false, message: "Mesero no válido" });
     }
-    if (!["mesero", "waiter", "cajero"].includes(usr.role)) {
+    if (!["mesero", "waiter", "cajero"].includes(String(usr.role || "").toLowerCase())) {
       await conn.rollback();
       return res.status(400).json({ success: false, message: "El usuario no es mesero" });
     }
 
-    // 3) Actualiza: user_id y name (nombre de la orden = nombre del mesero)
     await conn.execute(
       "UPDATE orders SET user_id = ?, name = ? WHERE id = ?",
       [waiterId, usr.name, orderId]
@@ -386,29 +339,22 @@ const assignWaiter = async (req, res, next) => {
     return res.json({
       success: true,
       message: "Mesero y nombre de la orden actualizados",
-      data: { waiter_id: usr.id, waiter_name: usr.name, previous_order_name: ord.name }
+      data: { waiter_id: usr.id, waiter_name: usr.name, previous_order_name: ord.name },
     });
   } catch (e) {
     try { if (conn) await conn.rollback(); } catch (_) {}
-    console.error("assignWaiter SQL:", e.code, e.sqlMessage || e.message, { orderId, waiterId });
-<<<<<<< HEAD
-    console.log("assign waiter error:", err?.response?.data); // 👈
-=======
->>>>>>> 63e0672 (Update Menu page)
+    console.error("assignWaiter error:", e.code, e.sqlMessage || e.message, { orderId, waiterId });
     return res.status(500).json({ success: false, message: "Error al reasignar mesero" });
   } finally {
     if (conn) conn.release();
   }
 };
 
-<<<<<<< HEAD
-
-
-=======
->>>>>>> 63e0672 (Update Menu page)
+/**
+ * KITCHEN PUBLIC (solo turno activo, no pagadas, items con notes ✅)
+ */
 const getKitchenOrdersPublic = async (req, res, next) => {
   try {
-    // 1. Turno activo
     const [[shift]] = await db.execute(`
       SELECT start_time
       FROM shifts
@@ -417,13 +363,12 @@ const getKitchenOrdersPublic = async (req, res, next) => {
       LIMIT 1
     `);
 
-    // Si no hay turno activo, cocina no muestra nada
     if (!shift?.start_time) {
       return res.json({ success: true, data: [] });
     }
 
-    // 2. Órdenes del turno actual y NO pagadas
-    const [orders] = await db.execute(`
+    const [orders] = await db.execute(
+      `
       SELECT o.*,
              t.table_no
       FROM orders o
@@ -431,23 +376,16 @@ const getKitchenOrdersPublic = async (req, res, next) => {
       WHERE o.order_date >= ?
         AND LOWER(o.order_status) != 'pagado'
       ORDER BY o.order_date ASC
-    `, [shift.start_time]);
+      `,
+      [shift.start_time]
+    );
 
-<<<<<<< HEAD
-    // 3. Items por orden
-    const ordersWithItems = await Promise.all(
-      orders.map(async (order) => {
-        const [items] = await db.execute(
-          `SELECT item_name, quantity FROM order_items WHERE order_id = ?`,
-=======
-    // 3. Items por orden (✅ ahora incluye notes)
     const ordersWithItems = await Promise.all(
       orders.map(async (order) => {
         const [items] = await db.execute(
           `SELECT item_name, quantity, notes
              FROM order_items
             WHERE order_id = ?`,
->>>>>>> 63e0672 (Update Menu page)
           [order.id]
         );
         return { ...order, items, table: { table_no: order.table_no } };
@@ -460,16 +398,6 @@ const getKitchenOrdersPublic = async (req, res, next) => {
   }
 };
 
-<<<<<<< HEAD
-
-
-
-
-
-// 👇 Exporta TODO en un solo objeto (clave del fix)
-=======
-// 👇 Exporta TODO
->>>>>>> 63e0672 (Update Menu page)
 module.exports = {
   addOrder,
   getOrderById,
@@ -477,9 +405,5 @@ module.exports = {
   updateOrder,
   getCashMovements,
   assignWaiter,
-<<<<<<< HEAD
-   getKitchenOrdersPublic,
-=======
   getKitchenOrdersPublic,
->>>>>>> 63e0672 (Update Menu page)
 };
