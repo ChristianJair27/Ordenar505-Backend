@@ -14,6 +14,7 @@ const verifyToken = require("./middlewares/verifyToken");
 const shiftRoutes = require("./routes/shiftRoutes");
 
 
+
 const orderRoute = require("./routes/orderRoute");
 
 // 👇 Kiosk (meseros tipo Netflix)
@@ -23,7 +24,7 @@ const PORT = process.env.PORT || 80;
 
 const allowedOrigins = [
   "http://192.168.1.11:5173",
-  "http://192.168.1.80:5173",
+  "http://192.168.1.85:5173",
   "http://192.168.1.78:5173",
   "http://localhost:5173",
   "http://187.200.118.87:5173",
@@ -93,6 +94,9 @@ app.use("/api/orders", require("./routes/orderRoute"));
 app.use("/api/table", require("./routes/tableRoute"));
 app.use("/api/payment", require("./routes/paymentRoute"));
 
+// Reports
+app.use('/api/reports', require('./routes/reportRoutes'));
+
 // Cash / cash-register (mantén solo estas dos)
 app.use("/api/cash", cashRegisterRoutes); // p.ej. /api/cash/balance
 app.use("/api",      cashRoutes);         // p.ej. /api/cash-register
@@ -106,6 +110,12 @@ app.use("/api/dishes",     dishRoutes);
 app.use("/api", require("./routes/waiterRoute"));
 
 app.use("/api/order", orderRoute);
+
+
+
+
+
+
 
 // Global error
 app.use(globalErrorHandler);
