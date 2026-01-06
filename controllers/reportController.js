@@ -1,5 +1,6 @@
 // controllers/reportController.js
 const db = require('../config/database'); // ← ESTA ES LA LÍNEA CORRECTA
+const axios = require('axios');
 
 // Resumen general de ventas
 const getSalesSummary = async (req, res) => {
@@ -258,13 +259,167 @@ const getTopKitchenTips = async (req, res) => {
 
 
 
+// Análisis inteligente con IA local (Ollama)
+const getAIAnalysis = async (req, res) => {
+  const { 
+    salesSummary, 
+    topDishes = [], 
+    topWaiters = [], 
+    topKitchenTips = [], 
+    totalKitchenTips = 0,
+    paymentMethods = { cash: 0, card: 0, other: 0 }, 
+    salesByHour = [], 
+    comparison,
+    start,
+    end 
+  } = req.body;
+
+  if (!salesSummary || !start || !end) {
+    return res.status(400).json({ message: "Faltan datos necesarios para el análisis IA" });
+  }
+
+ try {
+    console.log("=== INICIANDO ANÁLISIS IA ===");
+    console.log("Conectando a: http://lpsantiago.ddns.net:11434");
+    console.log("Modelo: dolphin-llama3:8b");
+    console.log("Fechas:", start, "al", end);
+    console.log("Ventas totales:", salesSummary?.totalSales);
+
+    // Hora pico
+    const peakHourObj = salesByHour.reduce((max, h) => 
+      h.total_sales > max.total_sales ? h : max, 
+      salesByHour[0] || { hour: '?', total_sales: 0 }
+    );
+    const peakHour = peakHourObj.hour !== undefined ? `${peakHourObj.hour}:00 hs` : 'N/A';
+
+    // Top 3
+    const top3Dishes = topDishes.slice(0, 3).map((d, i) => 
+      `${i+1}. ${d.name} - $${parseFloat(d.total_sales || 0).toFixed(2)}`
+    ).join('\n') || 'No hay datos';
+
+    const top3Waiters = topWaiters.slice(0, 3).map((w, i) => 
+      `${i+1}. ${w.name} - $${parseFloat(w.total_sales || 0).toFixed(2)}`
+    ).join('\n') || 'No hay datos';
+
+    const top3KitchenTips = topKitchenTips.slice(0, 3).map((w, i) => 
+      `${i+1}. ${w.name} - $${parseFloat(w.kitchen_tips || 0).toFixed(2)}`
+    ).join('\n') || 'No hay datos';
+
+    const prompt = `Eres un asesor de restaurantes amigable y motivador, como un amigo experto que ayuda a crecer el negocio. Analiza estos datos del ${start} al ${end} y genera un reporte intuitivo, fácil de leer, con emojis para destacar puntos clave.
+
+Datos clave:
+- 📈 Ventas totales: $${parseFloat(salesSummary.totalSales).toFixed(2)}
+- 📋 Órdenes: ${salesSummary.totalOrders}
+- 💰 Ticket promedio: $${parseFloat(salesSummary.avgTicket).toFixed(2)}
+- 👩‍🍳 Propinas cocina (3%): $${parseFloat(totalKitchenTips).toFixed(2)}
+
+Top 3 platillos:
+${top3Dishes}
+
+Top 3 meseros por ventas:
+${top3Waiters}
+
+Top 3 meseros por propinas cocina:
+${top3KitchenTips}
+
+Métodos de pago:
+- 💵 Efectivo: $${parseFloat(paymentMethods.cash).toFixed(2)}
+- 💳 Tarjeta: $${parseFloat(paymentMethods.card).toFixed(2)}
+
+🕒 Hora pico: ${peakHour}
+
+📊 Comparación anterior: ${comparison?.percentage >= 0 ? 'Crecimiento' : 'Caída'} del ${Math.abs(comparison?.percentage || 0)}%
+
+Entrega en español, con emojis y lenguaje simple:
+1. Resumen ejecutivo (3-4 líneas, motivador: empieza con "¡Bien hecho!" o "Oportunidad de oro")
+2. Fortalezas destacadas (viñetas con emojis)
+3. Alertas o mejoras (viñetas con ⚠️ o 📉)
+4. 3 recomendaciones accionables (viñetas con ✅, incluye pasos simples y estimación de impacto, ej. "podría aumentar ventas en 10-20%")
+5. Comentario sobre el equipo (motivador, con 🌟 para destacar nombres)
+
+Sé directo, positivo y útil. Usa viñetas para fácil lectura.`;
+
+    console.log("Prompt generado (longitud:", prompt.length, "caracteres)");
+
+    // Instancia limpia de axios
+    const ollamaAxios = axios.create({
+      baseURL: 'http://lpsantiago.ddns.net:11434',
+      timeout: 600000, // 3 minutos por si el modelo tarda
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    console.log("Enviando petición a Ollama...");
+
+    const response = await ollamaAxios.post('/api/chat', {
+      model: 'phi3:medium',
+      messages: [{ role: 'user', content: prompt }],
+      stream: false,
+      options: {
+        temperature: 0.7,
+        num_predict: 1200
+      }
+    });
+
+    console.log("¡Respuesta recibida de Ollama exitosamente!");
+
+    const analysis = response.data.message?.content?.trim() || "No se recibió contenido válido del modelo.";
+
+    console.log("Análisis generado con éxito");
+
+    res.json({ analysis });
+
+  } catch (error) {
+    console.error("=== ERROR DETALLADO CON OLLAMA ===");
+    console.error("Message:", error.message);
+    console.error("Code:", error.code);
+    console.error("Errno:", error.errno);
+    console.error("Syscall:", error.syscall);
+    console.error("Address:", error.address);
+    console.error("Port:", error.port);
+
+    if (error.response) {
+      console.error("Status Ollama:", error.response.status);
+      console.error("Data Ollama:", error.response.data);
+    }
+
+    // Mensajes más claros según el tipo de error
+    if (error.code === 'ECONNREFUSED') {
+      return res.status(502).json({ 
+        message: "El servidor Ollama rechazó la conexión. Verifica que el puerto 11434 esté abierto desde fuera." 
+      });
+    }
+
+    if (error.code === 'ENOTFOUND') {
+      return res.status(502).json({ 
+        message: "No se encontró lpsantiago.ddns.net. Verifica tu DDNS o conexión a internet." 
+      });
+    }
+
+    if (error.code === 'ETIMEDOUT') {
+      return res.status(504).json({ 
+        message: "Timeout: Ollama tardó demasiado en responder. Puede estar sobrecargado o inaccesible." 
+      });
+    }
+
+    res.status(500).json({ 
+      message: "Error crítico al conectar con Ollama remoto",
+      details: error.message,
+      code: error.code || 'UNKNOWN'
+    });
+  }
+};
+
+
 
 module.exports = {
   getSalesSummary,
   getTopDishes,
   getPaymentMethods,
-  getTopWaiters,      
-  getSalesByHour,     
+  getTopWaiters,
+  getSalesByHour,
   getComparison,
-  getTopKitchenTips       
+  getTopKitchenTips,
+  getAIAnalysis
 };
