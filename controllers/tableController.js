@@ -37,29 +37,51 @@ const addTable = async (req, res, next) => {
 // Obtener todas las mesas con datos de la orden actual (si existe)
 
 const getTables = async (req, res, next) => {
+  let connection;
   try {
-    const connection = await db.getConnection();
+    connection = await db.getConnection();
 
     const [tables] = await connection.execute(`
-      SELECT t.*, o.name AS customer_name, o.phone AS customer_phone
+      SELECT 
+        t.id,
+        t.table_no,
+        t.seats,
+        t.status,
+        t.current_order_id,
+        o.id AS order_id,
+        o.total,
+        o.total_with_tax,
+        o.order_date,
+        o.user_id AS waiter_id,
+        u.name AS waiter_name,
+        o.name AS customer_name,
+        o.phone AS customer_phone,
+        TIMESTAMPDIFF(MINUTE, o.order_date, NOW()) AS minutes_occupied
       FROM tables t
       LEFT JOIN orders o ON t.current_order_id = o.id
+      LEFT JOIN users u ON o.user_id = u.id
+      ORDER BY t.table_no ASC
     `);
+
+    // Opcional: formatear un poco los datos antes de enviar
+    const formattedTables = tables.map(table => ({
+      ...table,
+      total: Number(table.total || 0),
+      total_with_tax: Number(table.total_with_tax || 0),
+      minutes_occupied: table.minutes_occupied || 0,
+      waiter_name: table.waiter_name || "Sin mesero",
+    }));
 
     res.status(200).json({
       success: true,
-      data: tables
+      data: formattedTables,
     });
-
-    connection.release();
 
   } catch (error) {
     console.error("❌ Error en getTables:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error interno al obtener las mesas",
-      error: error.message
-    });
+    next(createHttpError(500, "Error al obtener las mesas"));
+  } finally {
+    if (connection) connection.release();
   }
 };
 
