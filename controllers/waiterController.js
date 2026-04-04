@@ -19,28 +19,34 @@ async function getTodayStatsFromCash(req, res) {
     const start = moment().tz("America/Mexico_City").startOf("day").format("YYYY-MM-DD HH:mm:ss");
     const end   = moment().tz("America/Mexico_City").endOf("day").format("YYYY-MM-DD HH:mm:ss");
 
-    // Query: ventas del día para ese mesero
+    // Métodos de pago considerados tarjeta
+    const CARD_METHODS = ['tarjeta', 'card', 'credito', 'debito', 'tc', 'td'];
+
+    // Query: ventas del día para ese mesero con desglose efectivo/tarjeta
     const [rows] = await db.query(
       `
       SELECT
-        COUNT(DISTINCT order_id)                                            AS orders_count,
-        COALESCE(SUM(CASE WHEN type IN (?) THEN amount ELSE 0 END), 0)      AS revenue
+        COUNT(DISTINCT order_id)                                                   AS orders_count,
+        COALESCE(SUM(amount), 0)                                                   AS revenue,
+        COALESCE(SUM(CASE WHEN LOWER(COALESCE(payment_method,'')) IN (${CARD_METHODS.map(() => '?').join(',')}) THEN amount ELSE 0 END), 0) AS card_revenue,
+        COALESCE(SUM(CASE WHEN LOWER(COALESCE(payment_method,'')) NOT IN (${CARD_METHODS.map(() => '?').join(',')}) THEN amount ELSE 0 END), 0) AS cash_revenue
       FROM cash_register
       WHERE waiter_id = ?
         AND type IN (?)
         AND ${COL_TS} BETWEEN ? AND ?
       `,
-      // Nota: para pasar un array a IN (?) con mysql2, pásalo dos veces (para ambas IN)
-      [SALES_TYPES, waiterId, SALES_TYPES, start, end]
+      [...CARD_METHODS, ...CARD_METHODS, waiterId, SALES_TYPES, start, end]
     );
 
-    const orders_count = Number(rows?.[0]?.orders_count || 0);
-    const revenue = Number(rows?.[0]?.revenue || 0);
-    const kitchen_tips = +(revenue * TIPS_PCT).toFixed(2);
+    const orders_count  = Number(rows?.[0]?.orders_count  || 0);
+    const revenue       = Number(rows?.[0]?.revenue       || 0);
+    const card_revenue  = Number(rows?.[0]?.card_revenue  || 0);
+    const cash_revenue  = Number(rows?.[0]?.cash_revenue  || 0);
+    const kitchen_tips  = +(revenue * TIPS_PCT).toFixed(2);
 
     return res.status(200).json({
       success: true,
-      data: { orders_count, revenue, kitchen_tips }
+      data: { orders_count, revenue, card_revenue, cash_revenue, kitchen_tips }
     });
   } catch (e) {
     console.error("getTodayStatsFromCash error:", e);

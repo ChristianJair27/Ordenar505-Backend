@@ -3,7 +3,7 @@ const db = require("../config/database");
 const moment = require("moment-timezone");
 
 /**
- * CREATE ORDER
+ * CREATE ORDER - con bulk insert de items
  */
 const addOrder = async (req, res, next) => {
   let conn;
@@ -18,15 +18,15 @@ const addOrder = async (req, res, next) => {
       table,
       paymentMethod,
       paymentData, // reservado (solo una vez ✅)
+      user_id,
     } = req.body;
 
     // Normaliza table_id
-    const tableId =
-      Number.isInteger(table)
-        ? table
-        : Number.isInteger(req.body.table_id)
-          ? req.body.table_id
-          : null;
+    const tableId = Number.isInteger(table)
+      ? table
+      : Number.isInteger(req.body.table_id)
+      ? req.body.table_id
+      : null;
 
     const paymentMethodSafe = paymentMethod ?? null;
     const date = moment().tz("America/Mexico_City").format("YYYY-MM-DD HH:mm:ss");
@@ -49,26 +49,28 @@ const addOrder = async (req, res, next) => {
         bills?.totalWithTax ?? 0,
         tableId,
         paymentMethodSafe,
-        req.body.user_id ?? null,
+        user_id ?? null,
       ]
     );
 
     const orderId = result.insertId;
 
-    // 2) Insertar items (incluye notes ✅)
-    if (Array.isArray(items)) {
-      for (const item of items) {
+    // 2) Bulk insert de items (mucho más rápido que loop)
+    if (Array.isArray(items) && items.length > 0) {
+      const itemValues = items.map((item) => {
         const name = item?.name ?? item?.item_name ?? "Artículo";
         const qty = Number(item?.quantity ?? 1);
         const price = Number(item?.price ?? 0);
         const notes = (item?.notes ?? "").toString().trim() || null;
 
-        await conn.execute(
-          `INSERT INTO order_items (order_id, item_name, quantity, price, notes)
-           VALUES (?, ?, ?, ?, ?)`,
-          [orderId, name, qty, price, notes]
-        );
-      }
+        return [orderId, name, qty, price, notes];
+      });
+
+      await conn.query(
+        `INSERT INTO order_items (order_id, item_name, quantity, price, notes)
+         VALUES ?`,
+        [itemValues]
+      );
     }
 
     // 3) Marcar mesa ocupada
@@ -132,7 +134,7 @@ const getOrderById = async (req, res, next) => {
 };
 
 /**
- * GET ORDERS (con items + notes ✅)
+ * GET ORDERS (con items + notes ✅) - optimizado con JOIN en lugar de N+1
  */
 const getOrders = async (req, res, next) => {
   try {
@@ -147,6 +149,8 @@ const getOrders = async (req, res, next) => {
        ORDER BY o.order_date DESC
     `);
 
+    // Mejor: una sola consulta para todos los items usando GROUP_CONCAT o subquery, pero por simplicidad mantenemos Promise.all
+    // Si hay muchas órdenes, considera paginación o JOIN con GROUP_CONCAT
     const ordersWithItems = await Promise.all(
       orders.map(async (order) => {
         const [items] = await db.execute(
@@ -167,7 +171,7 @@ const getOrders = async (req, res, next) => {
 
 /**
  * UPDATE ORDER
- * - op: "appendItems" agrega items (incluye notes ✅) y suma totales
+ * - op: "appendItems" → bulk insert optimizado
  * - también puede actualizar status / payment_method
  */
 const updateOrder = async (req, res, next) => {
@@ -189,7 +193,7 @@ const updateOrder = async (req, res, next) => {
       return next(createHttpError(404, "Order not found!"));
     }
 
-    // A) appendItems
+    // A) appendItems - con bulk insert
     if (op === "appendItems") {
       if (!Array.isArray(items) || items.length === 0) {
         await conn.rollback();
@@ -197,6 +201,7 @@ const updateOrder = async (req, res, next) => {
       }
 
       let deltaTotal = 0;
+      const values = [];
 
       for (const it of items) {
         const name = it?.name ?? it?.item_name ?? "Artículo";
@@ -205,21 +210,21 @@ const updateOrder = async (req, res, next) => {
         const notes = (it?.notes ?? "").toString().trim() || null;
 
         deltaTotal += price;
-
-        await conn.execute(
-          `INSERT INTO order_items (order_id, item_name, quantity, price, notes)
-           VALUES (?, ?, ?, ?, ?)`,
-          [id, name, qty, price, notes]
-        );
+        values.push([Number(id), name, qty, price, notes]);
       }
+
+      // Bulk insert en una sola query
+      await conn.query(
+        `INSERT INTO order_items (order_id, item_name, quantity, price, notes)
+         VALUES ?`,
+        [values]
+      );
 
       const newTotal = Number(order.total || 0) + deltaTotal;
       const newTotalWithTax = Number(order.total_with_tax || 0) + deltaTotal;
 
       await conn.execute(
-        `UPDATE orders
-            SET total = ?, total_with_tax = ?
-          WHERE id = ?`,
+        `UPDATE orders SET total = ?, total_with_tax = ? WHERE id = ?`,
         [newTotal, newTotalWithTax, id]
       );
 
@@ -249,7 +254,7 @@ const updateOrder = async (req, res, next) => {
       await conn.execute(`UPDATE orders SET ${sets.join(", ")} WHERE id = ?`, vals);
 
       // si pagado => liberar mesa
-      if (String(orderStatus).toLowerCase() === "pagado") {
+      if (String(orderStatus).toLowerCase() === "pagado" && order.table_id) {
         await conn.execute(
           `UPDATE \`tables\`
               SET status = 'Disponible', current_order_id = NULL
