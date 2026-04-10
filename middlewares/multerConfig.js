@@ -1,20 +1,26 @@
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 
-// Dónde guardar y cómo nombrar los archivos
+// Ruta absoluta al directorio de subida
+const uploadDir = path.join(__dirname, '..', 'public', 'uploads', 'dishes');
+
+// Crear directorio si no existe (evita errores al arrancar)
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'public/uploads/dishes/');   // ¡asegúrate que esta carpeta exista!
+    cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
-    // Ejemplo: timestamp + nombre original → evita sobreescrituras
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
+    const ext = path.extname(file.originalname).toLowerCase();
     cb(null, file.fieldname + '-' + uniqueSuffix + ext);
   }
 });
 
-// Filtro: solo imágenes
 const fileFilter = (req, file, cb) => {
   if (file.mimetype.startsWith('image/')) {
     cb(null, true);
@@ -24,9 +30,9 @@ const fileFilter = (req, file, cb) => {
 };
 
 const upload = multer({
-  storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB máximo (ajusta si quieres)
-  fileFilter: fileFilter
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter,
 });
 
 module.exports = upload;

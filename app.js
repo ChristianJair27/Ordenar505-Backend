@@ -1,6 +1,7 @@
 const express = require("express");
-const http = require("http");               // ← agregado
-const { Server } = require("socket.io");    // ← agregado
+const http = require("http");
+const path = require("path");
+const { Server } = require("socket.io");
 
 const db = require("./config/database");
 const config = require("./config/config");
@@ -146,7 +147,7 @@ app.use("/api", require("./routes/waiterRoute"));
 app.use("/api/order", orderRoute);
 
 
-app.use('/uploads', express.static('public/uploads'));
+app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
 
 
