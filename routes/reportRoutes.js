@@ -10,6 +10,7 @@ router.get('/sales-summary', reportController.getSalesSummary);
 router.get('/top-dishes', reportController.getTopDishes);
 router.get('/payment-methods', reportController.getPaymentMethods);
 
+router.get('/corte-por-mesero', reportController.getCortePorMeseroPorDia);
 router.get('/top-waiters', reportController.getTopWaiters);
 router.get('/sales-by-hour', reportController.getSalesByHour);
 router.get('/comparison', reportController.getComparison);

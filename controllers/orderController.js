@@ -403,6 +403,72 @@ const getKitchenOrdersPublic = async (req, res, next) => {
   }
 };
 
+/**
+ * CANCEL ORDER (solo admin)
+ */
+const cancelOrder = async (req, res, next) => {
+  let conn;
+  try {
+    conn = await db.getConnection();
+    const { id } = req.params;
+
+    // Verificar que quien cancela es admin
+    const [[currentUser]] = await conn.execute(
+      "SELECT role FROM users WHERE id = ?",
+      [req.user?.id]
+    );
+    if (!currentUser || currentUser.role?.toLowerCase() !== "admin") {
+      await conn.rollback();
+      return res.status(403).json({ success: false, message: "Solo el administrador puede cancelar órdenes" });
+    }
+
+    await conn.beginTransaction();
+
+    const [[order]] = await conn.execute(
+      "SELECT id, order_status, table_id FROM orders WHERE id = ?",
+      [id]
+    );
+
+    if (!order) {
+      await conn.rollback();
+      return next(createHttpError(404, "Orden no encontrada"));
+    }
+
+    const currentStatus = String(order.order_status || "").toLowerCase();
+    if (currentStatus === "cancelado") {
+      await conn.rollback();
+      return res.status(400).json({ success: false, message: "La orden ya está cancelada" });
+    }
+
+    // Actualizar estado
+    await conn.execute(
+      `UPDATE orders SET order_status = 'cancelado' WHERE id = ?`,
+      [id]
+    );
+
+    // Liberar mesa si tenía
+    if (order.table_id) {
+      await conn.execute(
+        `UPDATE tables SET status = 'Disponible', current_order_id = NULL WHERE id = ?`,
+        [order.table_id]
+      );
+    }
+
+    await conn.commit();
+
+    return res.json({
+      success: true,
+      message: "Orden cancelada exitosamente",
+      data: { orderId: Number(id), status: "cancelado" },
+    });
+  } catch (error) {
+    try { if (conn) await conn.rollback(); } catch (_) {}
+    next(error);
+  } finally {
+    if (conn) conn.release();
+  }
+};
+
 module.exports = {
   addOrder,
   getOrderById,
@@ -411,4 +477,5 @@ module.exports = {
   getCashMovements,
   assignWaiter,
   getKitchenOrdersPublic,
+  cancelOrder,
 };

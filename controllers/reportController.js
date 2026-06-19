@@ -105,6 +105,62 @@ const getPaymentMethods = async (req, res) => {
 
 
 
+// Corte por mesero de un día (admin)
+const getCortePorMeseroPorDia = async (req, res) => {
+  const { date } = req.query;
+  if (!date) {
+    return res.status(400).json({ message: "Falta parámetro date (YYYY-MM-DD)" });
+  }
+
+  const TIPS_PCT = 0.03;
+
+  try {
+    const [rows] = await db.query(`
+      SELECT
+        COALESCE(cr.waiter_id, cr.user_id) AS waiter_id,
+        COALESCE(w.name, u.name, 'Sin asignar') AS waiter_name,
+        SUM(CASE WHEN cr.type = 'venta' THEN cr.amount ELSE 0 END) AS revenue,
+        SUM(CASE WHEN cr.type = 'venta' AND cr.payment_method = 'efectivo' THEN cr.amount ELSE 0 END) AS efectivo,
+        SUM(CASE WHEN cr.type = 'venta' AND cr.payment_method = 'tarjeta' THEN cr.amount ELSE 0 END) AS tarjeta,
+        COUNT(CASE WHEN cr.type = 'venta' THEN 1 END) AS num_ordenes
+      FROM cash_register cr
+      LEFT JOIN users w ON cr.waiter_id = w.id
+      LEFT JOIN users u ON cr.user_id = u.id
+      WHERE DATE(cr.date) = ?
+      GROUP BY COALESCE(cr.waiter_id, cr.user_id), waiter_name
+      ORDER BY revenue DESC
+    `, [date]);
+
+    const porMesero = rows.map((r) => {
+      const revenue = Number(r.revenue || 0);
+      const propina = +(revenue * TIPS_PCT).toFixed(2);
+      return {
+        waiter_id: r.waiter_id,
+        waiter_name: r.waiter_name,
+        revenue,
+        efectivo: Number(r.efectivo || 0),
+        tarjeta: Number(r.tarjeta || 0),
+        num_ordenes: Number(r.num_ordenes || 0),
+        propina,
+      };
+    });
+
+    const totalRevenue = porMesero.reduce((s, m) => s + m.revenue, 0);
+    const totalPropinas = +(totalRevenue * TIPS_PCT).toFixed(2);
+
+    res.json({
+      date,
+      por_mesero: porMesero,
+      total_revenue: totalRevenue,
+      total_propinas: totalPropinas,
+      tips_percentage: TIPS_PCT,
+    });
+  } catch (error) {
+    console.error("Error en corte-por-mesero:", error);
+    res.status(500).json({ message: "Error al generar corte por mesero del día" });
+  }
+};
+
 // Top 10 meseros más vendidos
 const getTopWaiters = async (req, res) => {
   const { start, end } = req.query;
@@ -417,6 +473,7 @@ module.exports = {
   getSalesSummary,
   getTopDishes,
   getPaymentMethods,
+  getCortePorMeseroPorDia,
   getTopWaiters,
   getSalesByHour,
   getComparison,

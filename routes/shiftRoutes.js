@@ -9,6 +9,7 @@ const {
   getCurrentShift,
   getAllShifts,
   getShiftSummary,
+  getShiftCortePorMesero,
   getTurnoActual,
   getActiveShift,
   getActiveShiftByUser,
@@ -29,6 +30,7 @@ router.get("/turno-actual", verifyToken, getTurnoActual);
 // Listado de turnos y corte
 router.get("/shifts", verifyToken, getAllShifts);
 router.get("/shifts/:id/corte", verifyToken, getShiftSummary);
+router.get("/shifts/:id/corte-por-mesero", verifyToken, getShiftCortePorMesero);
 
 // (Opcional) Alias legacy, pero mismo handler
 // router.get("/turno-actual/venta-total", verifyToken, getTurnoActual);

@@ -120,6 +120,68 @@ exports.getAllShifts = async (req, res) => {
 };
 
 
+// Nuevo: Corte detallado por mesero (incluye propinas 3%)
+exports.getShiftCortePorMesero = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const TIPS_PCT = 0.03;
+
+    // Datos del turno
+    const [[shift]] = await db.execute(
+      `SELECT s.id, s.start_time as inicio, s.end_time as cierre, u.name as cajero
+       FROM shifts s
+       LEFT JOIN users u ON s.user_id = u.id
+       WHERE s.id = ?`,
+      [id]
+    );
+    if (!shift) return res.status(404).json({ message: "Turno no encontrado" });
+
+    // Ventas por mesero (waiter_id en cash_register)
+    const [rows] = await db.execute(`
+      SELECT 
+        COALESCE(cr.waiter_id, cr.user_id) as waiter_id,
+        COALESCE(w.name, u.name, 'Sin asignar') as waiter_name,
+        SUM(CASE WHEN cr.type = 'venta' THEN cr.amount ELSE 0 END) as revenue,
+        SUM(CASE WHEN cr.type = 'venta' AND cr.payment_method = 'efectivo' THEN cr.amount ELSE 0 END) as efectivo,
+        SUM(CASE WHEN cr.type = 'venta' AND cr.payment_method = 'tarjeta' THEN cr.amount ELSE 0 END) as tarjeta,
+        COUNT(CASE WHEN cr.type = 'venta' THEN 1 END) as num_ordenes
+      FROM cash_register cr
+      LEFT JOIN users w ON cr.waiter_id = w.id
+      LEFT JOIN users u ON cr.user_id = u.id
+      WHERE cr.shift_id = ?
+      GROUP BY COALESCE(cr.waiter_id, cr.user_id), waiter_name
+      ORDER BY revenue DESC
+    `, [id]);
+
+    const porMesero = rows.map(r => {
+      const revenue = Number(r.revenue || 0);
+      const propina = +(revenue * TIPS_PCT).toFixed(2);
+      return {
+        waiter_id: r.waiter_id,
+        waiter_name: r.waiter_name,
+        revenue,
+        efectivo: Number(r.efectivo || 0),
+        tarjeta: Number(r.tarjeta || 0),
+        num_ordenes: Number(r.num_ordenes || 0),
+        propina
+      };
+    });
+
+    const totalRevenue = porMesero.reduce((s, m) => s + m.revenue, 0);
+    const totalPropinas = +(totalRevenue * TIPS_PCT).toFixed(2);
+
+    res.json({
+      shift,
+      por_mesero: porMesero,
+      total_revenue: totalRevenue,
+      total_propinas: totalPropinas,
+      tips_percentage: TIPS_PCT
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.getShiftSummary = async (req, res, next) => {
   try {
     const { id } = req.params;

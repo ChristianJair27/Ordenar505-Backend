@@ -9,6 +9,7 @@ const {
   updateOrder,
   assignWaiter,
   getKitchenOrdersPublic,
+  cancelOrder,
 } = require("../controllers/orderController");
 
 // Si tu middleware exporta con module.exports = fn
@@ -28,5 +29,8 @@ router.put("/:id", updateOrder);      // PUT    /api/order/:id
 
 // Reasignar mesero (nota la ruta SIN "orders")
 router.put("/:id/assign-waiter", verifyToken, assignWaiter); // PUT /api/order/:id/assign-waiter
+
+// Cancelar orden (solo admin)
+router.post("/:id/cancel", verifyToken, cancelOrder);
 
 module.exports = router;
